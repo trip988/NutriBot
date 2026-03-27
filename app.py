@@ -22,7 +22,6 @@ st.markdown("""
     .stButton button { background-color: #e94560; color: white; border-radius: 10px; border: none; width: 100%; }
     .stButton button:hover { background-color: #c73652; }
     .stProgress > div > div { background-color: #e94560; }
-    .stChatInput { background-color: #16213e; }
     p, li { color: #eaeaea; }
     .stCaption { color: #a0a0a0; }
 </style>
@@ -71,11 +70,11 @@ def ask_nutribot(prompt, show_user_message=True):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-    
+
     with st.chat_message("assistant"):
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=st.session_state.messages if show_user_message else 
+            messages=st.session_state.messages if show_user_message else
                      st.session_state.messages + [{"role": "user", "content": prompt}]
         )
         reply = response.choices[0].message.content
@@ -87,7 +86,7 @@ def ask_nutribot(prompt, show_user_message=True):
                 "food": food_name,
                 "calories": calories
             })
-    
+
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
 with st.sidebar:
@@ -145,17 +144,46 @@ st.title("🥗 NutriBot")
 st.caption("Your personal AI nutrition assistant — ask about any food or drink!")
 st.markdown("---")
 
-for message in st.session_state.messages:
-    if message["role"] != "system":
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+tab1, tab2 = st.tabs(["💬 Chat", "⚖️ Compare Foods"])
 
-if st.session_state.quick_prompt:
-    prompt = st.session_state.quick_prompt
-    st.session_state.quick_prompt = None
-    ask_nutribot(prompt, show_user_message=False)
-    st.rerun()
+with tab2:
+    st.markdown("### Compare two foods side by side")
+    col1, col2 = st.columns(2)
+    with col1:
+        food1 = st.text_input("First food", placeholder="e.g. Chicken breast")
+    with col2:
+        food2 = st.text_input("Second food", placeholder="e.g. Paneer")
 
-if prompt := st.chat_input("Ask about any food or drink... e.g. 'nutrients in brown rice'"):
-    ask_nutribot(prompt, show_user_message=True)
-    st.rerun()
+    if st.button("⚖️ Compare Now"):
+        if food1 and food2:
+            with st.spinner(f"Comparing {food1} vs {food2}..."):
+                compare_prompt = f"""Compare the nutrition of {food1} vs {food2} per 100g.
+                Return a markdown table with these rows:
+                Calories, Protein, Carbohydrates, Fats, Fiber.
+                Add a Winner column showing which food wins for each nutrient.
+                Then add a 2 line summary of which food is overall healthier and why."""
+
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": compare_prompt}]
+                )
+                result = response.choices[0].message.content
+                st.markdown(result)
+        else:
+            st.warning("Please enter both foods to compare!")
+
+with tab1:
+    for message in st.session_state.messages:
+        if message["role"] != "system":
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    if st.session_state.quick_prompt:
+        prompt = st.session_state.quick_prompt
+        st.session_state.quick_prompt = None
+        ask_nutribot(prompt, show_user_message=False)
+        st.rerun()
+
+    if prompt := st.chat_input("Ask about any food or drink... e.g. 'nutrients in brown rice'"):
+        ask_nutribot(prompt, show_user_message=True)
+        st.rerun()
