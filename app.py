@@ -144,7 +144,7 @@ st.title("🥗 NutriBot")
 st.caption("Your personal AI nutrition assistant — ask about any food or drink!")
 st.markdown("---")
 
-tab1, tab2 = st.tabs(["💬 Chat", "⚖️ Compare Foods"])
+tab1, tab2, tab3 = st.tabs(["💬 Chat", "⚖️ Compare Foods", "🗓️ Meal Planner"])
 
 with tab2:
     st.markdown("### Compare two foods side by side")
@@ -171,6 +171,87 @@ with tab2:
                 st.markdown(result)
         else:
             st.warning("Please enter both foods to compare!")
+
+with tab3:
+    st.markdown("### Generate your personalized meal plan")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        calorie_target = st.number_input(
+            "Daily calorie target",
+            min_value=1000,
+            max_value=5000,
+            value=2000,
+            step=100
+        )
+    with col2:
+        diet_type = st.selectbox(
+            "Diet type",
+            ["Vegetarian", "Non-Vegetarian", "Vegan", "Eggetarian"]
+        )
+    with col3:
+        goal = st.selectbox(
+            "Your goal",
+            ["Weight Loss", "Muscle Gain", "Maintain Weight", "Improve Energy"]
+        )
+
+    cuisine = st.selectbox(
+        "Cuisine preference",
+        ["Indian", "Mediterranean", "Mixed International", "Continental"]
+    )
+
+    if st.button("🗓️ Generate Meal Plan"):
+        with st.spinner("Creating your personalized meal plan..."):
+            meal_prompt = f"""Create a detailed one day meal plan for someone with these requirements:
+            - Daily calorie target: {calorie_target} kcal
+            - Diet type: {diet_type}
+            - Goal: {goal}
+            - Cuisine preference: {cuisine}
+
+            Format it exactly like this:
+
+            ## Breakfast
+            - Meal name and portion
+            - Calories: X kcal
+            - Key nutrients: protein, carbs, fats
+
+            ## Mid Morning Snack
+            - Meal name and portion
+            - Calories: X kcal
+            - Key nutrients: protein, carbs, fats
+
+            ## Lunch
+            - Meal name and portion
+            - Calories: X kcal
+            - Key nutrients: protein, carbs, fats
+
+            ## Evening Snack
+            - Meal name and portion
+            - Calories: X kcal
+            - Key nutrients: protein, carbs, fats
+
+            ## Dinner
+            - Meal name and portion
+            - Calories: X kcal
+            - Key nutrients: protein, carbs, fats
+
+            ## Daily Summary
+            - Total calories
+            - Total protein
+            - Total carbs
+            - Total fats
+            - One tip for achieving the {goal} goal
+
+            Make it practical, delicious and achievable."""
+
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": meal_prompt}]
+            )
+            meal_plan = response.choices[0].message.content
+            st.markdown(meal_plan)
+
+            st.success("Meal plan generated! You can screenshot this or copy it.")
 
 with tab1:
     for message in st.session_state.messages:
