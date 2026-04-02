@@ -3,8 +3,10 @@ from groq import Groq
 import os
 from dotenv import load_dotenv
 import re
+from auth import init_db, signup_user, login_user
 
 load_dotenv()
+init_db()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 st.set_page_config(
@@ -24,9 +26,14 @@ st.markdown("""
     .stProgress > div > div { background-color: #e94560; }
     p, li { color: #eaeaea; }
     .stCaption { color: #a0a0a0; }
+    .login-box { max-width: 400px; margin: auto; padding: 2rem; background-color: #16213e; border-radius: 15px; border: 1px solid #0f3460; }
 </style>
 """, unsafe_allow_html=True)
 
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "username" not in st.session_state:
+    st.session_state.username = ""
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "system", "content": """You are NutriBot, an expert nutrition assistant.
@@ -49,13 +56,10 @@ if "messages" not in st.session_state:
 
         Be concise, friendly and helpful."""}
     ]
-
 if "calorie_log" not in st.session_state:
     st.session_state.calorie_log = []
-
 if "daily_goal" not in st.session_state:
     st.session_state.daily_goal = 2000
-
 if "quick_prompt" not in st.session_state:
     st.session_state.quick_prompt = None
 
@@ -89,182 +93,240 @@ def ask_nutribot(prompt, show_user_message=True):
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
-with st.sidebar:
-    st.image("https://img.icons8.com/color/96/salad.png", width=80)
-    st.markdown("## 🥗 NutriBot")
+def show_login_page():
+    st.markdown("<h1 style='text-align:center;'>🥗 NutriBot</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#a0a0a0;'>Your personal AI nutrition assistant</p>", unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown("### 🎯 Daily Calorie Goal")
-    st.session_state.daily_goal = st.number_input(
-        "Set your daily goal (kcal)",
-        min_value=500,
-        max_value=5000,
-        value=st.session_state.daily_goal,
-        step=50
-    )
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
 
-    total_calories = sum(item["calories"] for item in st.session_state.calorie_log)
-    progress = min(total_calories / st.session_state.daily_goal, 1.0)
+        with tab_login:
+            st.markdown("### Welcome back!")
+            username = st.text_input("Username", key="login_username")
+            password = st.text_input("Password", type="password", key="login_password")
+            if st.button("Login", key="login_btn"):
+                if username and password:
+                    success, message = login_user(username, password)
+                    if success:
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+                else:
+                    st.warning("Please fill in all fields!")
 
-    st.markdown("### 📊 Today's Progress")
-    st.progress(progress)
-    st.caption(f"{total_calories} / {st.session_state.daily_goal} kcal consumed")
+        with tab_signup:
+            st.markdown("### Create an account!")
+            new_username = st.text_input("Username", key="signup_username")
+            new_email = st.text_input("Email", key="signup_email")
+            new_password = st.text_input("Password", type="password", key="signup_password")
+            confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
+            if st.button("Sign Up", key="signup_btn"):
+                if new_username and new_email and new_password and confirm_password:
+                    if new_password != confirm_password:
+                        st.error("Passwords do not match!")
+                    elif len(new_password) < 6:
+                        st.error("Password must be at least 6 characters!")
+                    else:
+                        success, message = signup_user(new_username, new_email, new_password)
+                        if success:
+                            st.success(message + " Please login!")
+                        else:
+                            st.error(message)
+                else:
+                    st.warning("Please fill in all fields!")
 
-    if total_calories == 0:
-        st.info("Start asking about foods to track calories!")
-    elif total_calories < st.session_state.daily_goal * 0.5:
-        st.success("Keep eating, you need more fuel!")
-    elif total_calories < st.session_state.daily_goal:
-        st.info("Going well, almost at your goal!")
-    else:
-        st.warning("You have reached your daily goal!")
+def show_main_app():
+    with st.sidebar:
+        st.image("https://img.icons8.com/color/96/salad.png", width=80)
+        st.markdown(f"## 🥗 NutriBot")
+        st.markdown(f"👤 Welcome, **{st.session_state.username}**!")
+        st.markdown("---")
 
-    if st.session_state.calorie_log:
-        st.markdown("### 🍽️ Today's Food Log")
-        for item in st.session_state.calorie_log:
-            st.markdown(f"- {item['food']}: **{item['calories']} kcal**")
-        if st.button("🗑️ Clear Log"):
+        st.markdown("### 🎯 Daily Calorie Goal")
+        st.session_state.daily_goal = st.number_input(
+            "Set your daily goal (kcal)",
+            min_value=500,
+            max_value=5000,
+            value=st.session_state.daily_goal,
+            step=50
+        )
+
+        total_calories = sum(item["calories"] for item in st.session_state.calorie_log)
+        progress = min(total_calories / st.session_state.daily_goal, 1.0)
+
+        st.markdown("### 📊 Today's Progress")
+        st.progress(progress)
+        st.caption(f"{total_calories} / {st.session_state.daily_goal} kcal consumed")
+
+        if total_calories == 0:
+            st.info("Start asking about foods to track calories!")
+        elif total_calories < st.session_state.daily_goal * 0.5:
+            st.success("Keep eating, you need more fuel!")
+        elif total_calories < st.session_state.daily_goal:
+            st.info("Going well, almost at your goal!")
+        else:
+            st.warning("You have reached your daily goal!")
+
+        if st.session_state.calorie_log:
+            st.markdown("### 🍽️ Today's Food Log")
+            for item in st.session_state.calorie_log:
+                st.markdown(f"- {item['food']}: **{item['calories']} kcal**")
+            if st.button("🗑️ Clear Log"):
+                st.session_state.calorie_log = []
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown("### ⚡ Quick Search")
+        if st.button("🍌 Banana"):
+            st.session_state.quick_prompt = "What are the nutrients in a banana?"
+        if st.button("🍗 Chicken breast"):
+            st.session_state.quick_prompt = "What are the nutrients in 100g chicken breast?"
+        if st.button("🥚 Boiled eggs"):
+            st.session_state.quick_prompt = "What are the nutrients in 2 boiled eggs?"
+        if st.button("🥤 Coca Cola"):
+            st.session_state.quick_prompt = "What are the nutrients in Coca Cola?"
+        st.markdown("---")
+        if st.button("🚪 Logout"):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.session_state.messages = [st.session_state.messages[0]]
             st.session_state.calorie_log = []
             st.rerun()
+        st.caption("Built with Groq LLaMA + Streamlit")
 
+    st.title("🥗 NutriBot")
+    st.caption(f"Welcome back {st.session_state.username}! Ask me about any food or drink!")
     st.markdown("---")
-    st.markdown("### ⚡ Quick Search")
-    if st.button("🍌 Banana"):
-        st.session_state.quick_prompt = "What are the nutrients in a banana?"
-    if st.button("🍗 Chicken breast"):
-        st.session_state.quick_prompt = "What are the nutrients in 100g chicken breast?"
-    if st.button("🥚 Boiled eggs"):
-        st.session_state.quick_prompt = "What are the nutrients in 2 boiled eggs?"
-    if st.button("🥤 Coca Cola"):
-        st.session_state.quick_prompt = "What are the nutrients in Coca Cola?"
-    st.markdown("---")
-    st.caption("Built with Groq LLaMA + Streamlit")
 
-st.title("🥗 NutriBot")
-st.caption("Your personal AI nutrition assistant — ask about any food or drink!")
-st.markdown("---")
+    tab1, tab2, tab3 = st.tabs(["💬 Chat", "⚖️ Compare Foods", "🗓️ Meal Planner"])
 
-tab1, tab2, tab3 = st.tabs(["💬 Chat", "⚖️ Compare Foods", "🗓️ Meal Planner"])
+    with tab2:
+        st.markdown("### Compare two foods side by side")
+        col1, col2 = st.columns(2)
+        with col1:
+            food1 = st.text_input("First food", placeholder="e.g. Chicken breast")
+        with col2:
+            food2 = st.text_input("Second food", placeholder="e.g. Paneer")
 
-with tab2:
-    st.markdown("### Compare two foods side by side")
-    col1, col2 = st.columns(2)
-    with col1:
-        food1 = st.text_input("First food", placeholder="e.g. Chicken breast")
-    with col2:
-        food2 = st.text_input("Second food", placeholder="e.g. Paneer")
+        if st.button("⚖️ Compare Now"):
+            if food1 and food2:
+                with st.spinner(f"Comparing {food1} vs {food2}..."):
+                    compare_prompt = f"""Compare the nutrition of {food1} vs {food2} per 100g.
+                    Return a markdown table with these rows:
+                    Calories, Protein, Carbohydrates, Fats, Fiber.
+                    Add a Winner column showing which food wins for each nutrient.
+                    Then add a 2 line summary of which food is overall healthier and why."""
 
-    if st.button("⚖️ Compare Now"):
-        if food1 and food2:
-            with st.spinner(f"Comparing {food1} vs {food2}..."):
-                compare_prompt = f"""Compare the nutrition of {food1} vs {food2} per 100g.
-                Return a markdown table with these rows:
-                Calories, Protein, Carbohydrates, Fats, Fiber.
-                Add a Winner column showing which food wins for each nutrient.
-                Then add a 2 line summary of which food is overall healthier and why."""
+                    response = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role": "user", "content": compare_prompt}]
+                    )
+                    result = response.choices[0].message.content
+                    st.markdown(result)
+            else:
+                st.warning("Please enter both foods to compare!")
+
+    with tab3:
+        st.markdown("### Generate your personalized meal plan")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            calorie_target = st.number_input(
+                "Daily calorie target",
+                min_value=1000,
+                max_value=5000,
+                value=2000,
+                step=100
+            )
+        with col2:
+            diet_type = st.selectbox(
+                "Diet type",
+                ["Vegetarian", "Non-Vegetarian", "Vegan", "Eggetarian"]
+            )
+        with col3:
+            goal = st.selectbox(
+                "Your goal",
+                ["Weight Loss", "Muscle Gain", "Maintain Weight", "Improve Energy"]
+            )
+
+        cuisine = st.selectbox(
+            "Cuisine preference",
+            ["Indian", "Mediterranean", "Mixed International", "Continental"]
+        )
+
+        if st.button("🗓️ Generate Meal Plan"):
+            with st.spinner("Creating your personalized meal plan..."):
+                meal_prompt = f"""Create a detailed one day meal plan for someone with these requirements:
+                - Daily calorie target: {calorie_target} kcal
+                - Diet type: {diet_type}
+                - Goal: {goal}
+                - Cuisine preference: {cuisine}
+
+                Format it exactly like this:
+
+                ## Breakfast
+                - Meal name and portion
+                - Calories: X kcal
+                - Key nutrients: protein, carbs, fats
+
+                ## Mid Morning Snack
+                - Meal name and portion
+                - Calories: X kcal
+                - Key nutrients: protein, carbs, fats
+
+                ## Lunch
+                - Meal name and portion
+                - Calories: X kcal
+                - Key nutrients: protein, carbs, fats
+
+                ## Evening Snack
+                - Meal name and portion
+                - Calories: X kcal
+                - Key nutrients: protein, carbs, fats
+
+                ## Dinner
+                - Meal name and portion
+                - Calories: X kcal
+                - Key nutrients: protein, carbs, fats
+
+                ## Daily Summary
+                - Total calories
+                - Total protein
+                - Total carbs
+                - Total fats
+                - One tip for achieving the {goal} goal
+
+                Make it practical, delicious and achievable."""
 
                 response = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": compare_prompt}]
+                    messages=[{"role": "user", "content": meal_prompt}]
                 )
-                result = response.choices[0].message.content
-                st.markdown(result)
-        else:
-            st.warning("Please enter both foods to compare!")
+                meal_plan = response.choices[0].message.content
+                st.markdown(meal_plan)
+                st.success("Meal plan generated! You can screenshot this or copy it.")
 
-with tab3:
-    st.markdown("### Generate your personalized meal plan")
+    with tab1:
+        for message in st.session_state.messages:
+            if message["role"] != "system":
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        calorie_target = st.number_input(
-            "Daily calorie target",
-            min_value=1000,
-            max_value=5000,
-            value=2000,
-            step=100
-        )
-    with col2:
-        diet_type = st.selectbox(
-            "Diet type",
-            ["Vegetarian", "Non-Vegetarian", "Vegan", "Eggetarian"]
-        )
-    with col3:
-        goal = st.selectbox(
-            "Your goal",
-            ["Weight Loss", "Muscle Gain", "Maintain Weight", "Improve Energy"]
-        )
+        if st.session_state.quick_prompt:
+            prompt = st.session_state.quick_prompt
+            st.session_state.quick_prompt = None
+            ask_nutribot(prompt, show_user_message=False)
+            st.rerun()
 
-    cuisine = st.selectbox(
-        "Cuisine preference",
-        ["Indian", "Mediterranean", "Mixed International", "Continental"]
-    )
+        if prompt := st.chat_input("Ask about any food or drink... e.g. 'nutrients in brown rice'"):
+            ask_nutribot(prompt, show_user_message=True)
+            st.rerun()
 
-    if st.button("🗓️ Generate Meal Plan"):
-        with st.spinner("Creating your personalized meal plan..."):
-            meal_prompt = f"""Create a detailed one day meal plan for someone with these requirements:
-            - Daily calorie target: {calorie_target} kcal
-            - Diet type: {diet_type}
-            - Goal: {goal}
-            - Cuisine preference: {cuisine}
-
-            Format it exactly like this:
-
-            ## Breakfast
-            - Meal name and portion
-            - Calories: X kcal
-            - Key nutrients: protein, carbs, fats
-
-            ## Mid Morning Snack
-            - Meal name and portion
-            - Calories: X kcal
-            - Key nutrients: protein, carbs, fats
-
-            ## Lunch
-            - Meal name and portion
-            - Calories: X kcal
-            - Key nutrients: protein, carbs, fats
-
-            ## Evening Snack
-            - Meal name and portion
-            - Calories: X kcal
-            - Key nutrients: protein, carbs, fats
-
-            ## Dinner
-            - Meal name and portion
-            - Calories: X kcal
-            - Key nutrients: protein, carbs, fats
-
-            ## Daily Summary
-            - Total calories
-            - Total protein
-            - Total carbs
-            - Total fats
-            - One tip for achieving the {goal} goal
-
-            Make it practical, delicious and achievable."""
-
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": meal_prompt}]
-            )
-            meal_plan = response.choices[0].message.content
-            st.markdown(meal_plan)
-
-            st.success("Meal plan generated! You can screenshot this or copy it.")
-
-with tab1:
-    for message in st.session_state.messages:
-        if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-    if st.session_state.quick_prompt:
-        prompt = st.session_state.quick_prompt
-        st.session_state.quick_prompt = None
-        ask_nutribot(prompt, show_user_message=False)
-        st.rerun()
-
-    if prompt := st.chat_input("Ask about any food or drink... e.g. 'nutrients in brown rice'"):
-        ask_nutribot(prompt, show_user_message=True)
-        st.rerun()
+if st.session_state.logged_in:
+    show_main_app()
+else:
+    show_login_page()
