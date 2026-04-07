@@ -6,6 +6,7 @@ vitamins and minerals.
 
 ## Live Demo
 https://nutribot-byxpcpczdybfq79gpzqwxp.streamlit.app/
+The app is hosted on Streamlit Cloud free tier which has a cold start delay of about 30-60 seconds after inactivity. In production this would be solved with paid always-on hosting
 
 ## Built With
 - Python
